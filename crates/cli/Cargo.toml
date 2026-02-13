@@ -1,0 +1,12 @@
+[package]
+name = "stormdb-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytes = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+stormdb-common = { workspace = true }
+stormdb-protocol = { workspace = true }
