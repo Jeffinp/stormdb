@@ -10,3 +10,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 stormdb-common = { workspace = true }
 stormdb-protocol = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = "3"
+
+[[bench]]
+name = "storage_bench"
+harness = false

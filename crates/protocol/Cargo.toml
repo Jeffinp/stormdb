@@ -7,3 +7,10 @@ edition = "2024"
 bytes = { workspace = true }
 stormdb-common = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "protocol_bench"
+harness = false
