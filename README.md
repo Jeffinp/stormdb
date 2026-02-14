@@ -31,12 +31,12 @@ O projeto segue a estrutura de Cargo Workspace para modularização:
 
 ```mermaid
 graph TD
-    User[Client / CLI] -->|TCP (RESP)| Master[StormDB Master]
-    Monitor[TUI Dashboard] -.->|TCP (Stats)| Master
+    User["Client / CLI"] -->|"TCP (RESP)"| Master["StormDB Master"]
+    Monitor["TUI Dashboard"] -.->|"TCP (Stats)"| Master
     
     subgraph "Cluster StormDB"
-    Master -->|Broadcast Stream| Replica[StormDB Replica]
-    Master -->|AOF| Disk[(Persistence)]
+    Master -->|"Broadcast Stream"| Replica["StormDB Replica"]
+    Master -->|"AOF"| Disk[("Persistence")]
     end
     
     style Master fill:#e67e22,stroke:#333,stroke-width:2px,color:#fff
