@@ -16,24 +16,24 @@ stormdb/
 
 ## Comandos Suportados
 
-| Comando | Descrição |
-|---------|-----------|
-| `PING [msg]` | Retorna PONG ou a mensagem |
-| `ECHO msg` | Retorna a mensagem |
-| `GET key` | Retorna o valor da chave |
+| Comando                                | Descrição                                       |
+| -------------------------------------- | ----------------------------------------------- |
+| `PING [msg]`                           | Retorna PONG ou a mensagem                      |
+| `ECHO msg`                             | Retorna a mensagem                              |
+| `GET key`                              | Retorna o valor da chave                        |
 | `SET key value [EX s\|PX ms] [NX\|XX]` | Define valor com opções de expiração e condição |
-| `DEL key [key ...]` | Remove chaves |
-| `EXISTS key [key ...]` | Conta chaves existentes |
-| `INCR key` | Incrementa valor inteiro |
-| `DECR key` | Decrementa valor inteiro |
-| `LPUSH key value [value ...]` | Insere no início da lista |
-| `RPUSH key value [value ...]` | Insere no final da lista |
-| `LPOP key [count]` | Remove do início da lista |
-| `RPOP key [count]` | Remove do final da lista |
-| `LRANGE key start stop` | Retorna intervalo da lista |
-| `SUBSCRIBE channel [channel ...]` | Inscreve-se em canais |
-| `PUBLISH channel message` | Publica mensagem em canal |
-| `UNSUBSCRIBE [channel ...]` | Cancela inscrição |
+| `DEL key [key ...]`                    | Remove chaves                                   |
+| `EXISTS key [key ...]`                 | Conta chaves existentes                         |
+| `INCR key`                             | Incrementa valor inteiro                        |
+| `DECR key`                             | Decrementa valor inteiro                        |
+| `LPUSH key value [value ...]`          | Insere no início da lista                       |
+| `RPUSH key value [value ...]`          | Insere no final da lista                        |
+| `LPOP key [count]`                     | Remove do início da lista                       |
+| `RPOP key [count]`                     | Remove do final da lista                        |
+| `LRANGE key start stop`                | Retorna intervalo da lista                      |
+| `SUBSCRIBE channel [channel ...]`      | Inscreve-se em canais                           |
+| `PUBLISH channel message`              | Publica mensagem em canal                       |
+| `UNSUBSCRIBE [channel ...]`            | Cancela inscrição                               |
 
 ## Quick Start
 
@@ -69,16 +69,16 @@ cargo bench
 
 ## Benchmarks
 
-| Operação | Tempo |
-|----------|-------|
-| Parse simple string | ~33 ns |
-| Encode simple string | ~27 ns |
-| Parse bulk 1KB | ~54 ns |
-| Parse SET command | ~538 ns |
-| SET+GET sequencial 10K | ~4.1 ms |
-| INCR sequencial 10K | ~787 us |
+| Operação                       | Tempo   |
+| ------------------------------ | ------- |
+| Parse simple string            | ~33 ns  |
+| Encode simple string           | ~27 ns  |
+| Parse bulk 1KB                 | ~54 ns  |
+| Parse SET command              | ~538 ns |
+| SET+GET sequencial 10K         | ~4.1 ms |
+| INCR sequencial 10K            | ~787 us |
 | INCR concorrente 4 threads 10K | ~1.5 ms |
-| RPUSH+LPOP 1K | ~216 us |
+| RPUSH+LPOP 1K                  | ~216 us |
 
 ## Stack
 

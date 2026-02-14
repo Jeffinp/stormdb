@@ -16,6 +16,7 @@ thiserror = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1.0"
 

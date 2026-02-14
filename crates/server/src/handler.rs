@@ -1,5 +1,6 @@
-use bytes::Bytes;
 use tokio::sync::{broadcast, mpsc};
+use tokio_stream::{StreamExt, StreamMap};
+use tokio_stream::wrappers::BroadcastStream;
 use tracing::debug;
 
 use stormdb_common::{ConnectionError, StorageError};
@@ -166,11 +167,11 @@ async fn handle_subscribe(
     channels: Vec<String>,
     shutdown: &mut broadcast::Receiver<()>,
 ) -> Result<(), ConnectionError> {
-    let mut receivers = Vec::new();
+    let mut receivers = StreamMap::new();
 
     for (i, channel) in channels.iter().enumerate() {
         let rx = db.subscribe(channel).await;
-        receivers.push((channel.clone(), rx));
+        receivers.insert(channel.clone(), BroadcastStream::new(rx));
 
         let confirm = Frame::Array(vec![
             Frame::bulk("subscribe"),
@@ -182,9 +183,9 @@ async fn handle_subscribe(
 
     loop {
         tokio::select! {
-            result = recv_any(&mut receivers) => {
+            Some((channel, result)) = receivers.next() => {
                 match result {
-                    Some((channel, message)) => {
+                    Ok(message) => {
                         let msg_frame = Frame::Array(vec![
                             Frame::bulk("message"),
                             Frame::bulk(&channel),
@@ -192,8 +193,12 @@ async fn handle_subscribe(
                         ]);
                         conn.write_frame(&msg_frame).await?;
                     }
-                    None => {
-                        return Ok(());
+                    Err(e) => {
+                        debug!("erro no stream do canal {channel}: {e}");
+                        receivers.remove(&channel);
+                        if receivers.is_empty() {
+                            return Ok(());
+                        }
                     }
                 }
             }
@@ -204,13 +209,13 @@ async fn handle_subscribe(
                             match cmd {
                                 Command::Unsubscribe(unsub_channels) => {
                                     let channels_to_unsub = if unsub_channels.is_empty() {
-                                        receivers.iter().map(|(c, _)| c.clone()).collect::<Vec<_>>()
+                                        receivers.keys().cloned().collect::<Vec<_>>()
                                     } else {
                                         unsub_channels
                                     };
 
                                     for ch in &channels_to_unsub {
-                                        receivers.retain(|(c, _)| c != ch);
+                                        receivers.remove(ch);
                                         db.unsubscribe(ch).await;
                                     }
 
@@ -229,7 +234,7 @@ async fn handle_subscribe(
                                     let current_count = receivers.len();
                                     for (i, channel) in new_channels.iter().enumerate() {
                                         let rx = db.subscribe(channel).await;
-                                        receivers.push((channel.clone(), rx));
+                                        receivers.insert(channel.clone(), BroadcastStream::new(rx));
 
                                         let confirm = Frame::Array(vec![
                                             Frame::bulk("subscribe"),
@@ -253,26 +258,5 @@ async fn handle_subscribe(
                 return Ok(());
             }
         }
-    }
-}
-
-/// Helper: recebe de qualquer receiver no vetor.
-async fn recv_any(
-    receivers: &mut [(String, broadcast::Receiver<Bytes>)],
-) -> Option<(String, Bytes)> {
-    if receivers.is_empty() {
-        std::future::pending::<()>().await;
-        return None;
-    }
-
-    loop {
-        for (channel, rx) in receivers.iter_mut() {
-            match rx.try_recv() {
-                Ok(msg) => return Some((channel.clone(), msg)),
-                Err(broadcast::error::TryRecvError::Closed) => return None,
-                Err(_) => {}
-            }
-        }
-        tokio::task::yield_now().await;
     }
 }

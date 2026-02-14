@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info};
 
 use stormdb_common::{DEFAULT_HOST, DEFAULT_PORT, MAX_CONNECTIONS};
-use stormdb_server::{Connection, handle_connection};
+use stormdb_server::{Connection, handle_connection, replication};
 use stormdb_storage::{Db, FsyncPolicy, create_aof, replay_aof};
 
 #[derive(Parser, Debug)]
@@ -23,6 +23,8 @@ struct Args {
     aof: Option<PathBuf>,
     #[arg(long, default_value = "everysec", value_parser = parse_fsync)]
     fsync: FsyncPolicy,
+    #[arg(long, num_args = 2, value_names = ["HOST", "PORT"])]
+    replicaof: Option<Vec<String>>,
 }
 
 fn parse_fsync(s: &str) -> Result<FsyncPolicy, String> {
@@ -71,6 +73,21 @@ async fn main() -> anyhow::Result<()> {
 
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(args.max_connections));
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+    // Iniciar Replicação se configurado
+    if let Some(replica_args) = args.replicaof {
+        if replica_args.len() == 2 {
+            let master_host = replica_args[0].clone();
+            let master_port = replica_args[1].parse::<u16>().unwrap_or(6379);
+            
+            let db_replica = db.clone();
+            let shutdown_replica = shutdown_tx.subscribe();
+            
+            tokio::spawn(async move {
+                replication::replica_task(master_host, master_port, db_replica, shutdown_replica).await;
+            });
+        }
+    }
 
     loop {
         let permit = tokio::select! {

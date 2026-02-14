@@ -8,6 +8,7 @@ anyhow = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 stormdb-common = { workspace = true }
