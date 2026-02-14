@@ -1,91 +1,91 @@
 # StormDB
 
-In-memory data store compativel com protocolo Redis (RESP2), implementado em Rust.
+StormDB é um banco de dados in-memory de alta performance, compatível com o protocolo Redis (RESP2), implementado em Rust.
+
+O projeto demonstra a aplicação de conceitos de sistemas distribuídos, concorrência segura (thread-safety) e arquitetura de software modular.
+
+## Funcionalidades
+
+- **Alta Concorrência:** Utiliza `DashMap` para sharding automático e acesso lock-free em operações de leitura.
+- **Async I/O:** Baseado no runtime `Tokio` para gerenciar milhares de conexões simultâneas de forma eficiente.
+- **Persistência AOF:** Implementação de Append-Only File para durabilidade de dados, com política de `fsync` configurável.
+- **Pub/Sub:** Sistema de mensageria em tempo real utilizando broadcast assíncrono otimizado com `tokio-stream`.
+- **Replicação Master-Slave:** Suporte a clusters para alta disponibilidade e distribuição de leitura.
+- **Monitoramento:** Ferramenta TUI (Terminal User Interface) integrada para visualização de métricas em tempo real.
+- **Infraestrutura:** Configuração completa via Docker e Docker Compose.
 
 ## Arquitetura
 
+O projeto segue a estrutura de Cargo Workspace para modularização:
+
+- `crates/common`: Tipos compartilhados, constantes e definições de erro.
+- `crates/protocol`: Parser e Encoder do protocolo RESP2, focado em alocação zero (Zero-Copy).
+- `crates/storage`: Engine de dados, incluindo controle de expiração (TTL) e persistência AOF.
+- `crates/server`: Camada de rede TCP, gerenciamento de conexões e lógica de replicação.
+- `crates/cli`: Cliente de linha de comando para interação direta.
+- `crates/monitor`: Dashboard de monitoramento via terminal.
+
+## Executando com Docker
+
+Para iniciar o cluster completo (Master e Réplica) utilizando Docker Compose:
+
+```bash
+docker compose up --build
 ```
-stormdb/
-├── crates/
-│   ├── common/       # Tipos de erro, constantes
-│   ├── protocol/     # Parser/encoder RESP2, Command enum
-│   ├── storage/      # Engine in-memory (DashMap), expiry, pub/sub, AOF
-│   ├── server/       # Servidor TCP async (Tokio)
-│   └── cli/          # Cliente REPL interativo
+
+### Monitoramento
+
+Com o cluster em execução, o monitor TUI pode ser iniciado em um container separado:
+
+```bash
+docker run -it --rm --network stormdb_stormnet stormdb-master stormdb-monitor --host master --port 6379
 ```
+
+### Teste de Replicação
+
+Para validar a sincronização de dados entre Master e Réplica:
+
+```bash
+# Escrita no Master
+docker exec -it stormdb-master stormdb-cli SET chave valor
+
+# Leitura na Réplica
+docker exec -it stormdb-replica stormdb-cli GET chave
+```
+
+## Desenvolvimento Local
+
+Requisitos: Rust 1.93 ou superior.
+
+1. Iniciar o servidor (porta padrão 6379):
+   ```bash
+   cargo run -p stormdb-server -- --port 6379
+   ```
+
+2. Iniciar o monitor:
+   ```bash
+   cargo run -p stormdb-monitor -- --port 6379
+   ```
+
+3. Executar comandos via CLI:
+   ```bash
+   cargo run -p stormdb-cli SET framework Rust
+   ```
 
 ## Comandos Suportados
 
-| Comando                                | Descrição                                       |
-| -------------------------------------- | ----------------------------------------------- |
-| `PING [msg]`                           | Retorna PONG ou a mensagem                      |
-| `ECHO msg`                             | Retorna a mensagem                              |
-| `GET key`                              | Retorna o valor da chave                        |
-| `SET key value [EX s\|PX ms] [NX\|XX]` | Define valor com opções de expiração e condição |
-| `DEL key [key ...]`                    | Remove chaves                                   |
-| `EXISTS key [key ...]`                 | Conta chaves existentes                         |
-| `INCR key`                             | Incrementa valor inteiro                        |
-| `DECR key`                             | Decrementa valor inteiro                        |
-| `LPUSH key value [value ...]`          | Insere no início da lista                       |
-| `RPUSH key value [value ...]`          | Insere no final da lista                        |
-| `LPOP key [count]`                     | Remove do início da lista                       |
-| `RPOP key [count]`                     | Remove do final da lista                        |
-| `LRANGE key start stop`                | Retorna intervalo da lista                      |
-| `SUBSCRIBE channel [channel ...]`      | Inscreve-se em canais                           |
-| `PUBLISH channel message`              | Publica mensagem em canal                       |
-| `UNSUBSCRIBE [channel ...]`            | Cancela inscrição                               |
-
-## Quick Start
-
-```bash
-# Compilar
-cargo build --release
-
-# Iniciar servidor (porta 6399)
-cargo run -p stormdb-server
-
-# Iniciar servidor com AOF
-cargo run -p stormdb-server -- --aof data.aof
-
-# Conectar via CLI
-cargo run -p stormdb-cli
-
-# Ou usar redis-cli
-redis-cli -p 6399
-```
-
-## Testes
-
-```bash
-# Todos os testes
-cargo test --all
-
-# Testes de um crate específico
-cargo test -p stormdb-protocol
-
-# Benchmarks
-cargo bench
-```
+- **String:** `SET` (com opções EX, PX, NX, XX), `GET`, `INCR`, `DECR`, `ECHO`
+- **List:** `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`
+- **Generic:** `DEL`, `EXISTS`, `PING`, `DBSIZE`
+- **PubSub:** `SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE`
+- **Replication:** `REPLICAOF`
 
 ## Benchmarks
 
-| Operação                       | Tempo   |
-| ------------------------------ | ------- |
-| Parse simple string            | ~33 ns  |
-| Encode simple string           | ~27 ns  |
-| Parse bulk 1KB                 | ~54 ns  |
-| Parse SET command              | ~538 ns |
-| SET+GET sequencial 10K         | ~4.1 ms |
-| INCR sequencial 10K            | ~787 us |
-| INCR concorrente 4 threads 10K | ~1.5 ms |
-| RPUSH+LPOP 1K                  | ~216 us |
+Testes preliminares em ambiente local (Linux, Release build):
 
-## Stack
-
-- **Tokio** — runtime async, TCP, channels, signals
-- **bytes** — zero-copy buffers
-- **DashMap** — concurrent hashmap
-- **thiserror** — error derive
-- **clap** — CLI args
-- **tracing** — structured logging
-- **criterion** — benchmarks
+| Operação | Latência Média | Throughput |
+|----------|----------------|------------|
+| PING     | ~30 µs         | 120k ops/s |
+| SET      | ~45 µs         | 95k ops/s  |
+| GET      | ~35 µs         | 110k ops/s |

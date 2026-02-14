@@ -61,6 +61,7 @@ pub enum Command {
         channel: String,
         message: Bytes,
     },
+    DbSize,
     Unknown(String),
 }
 
@@ -193,6 +194,10 @@ impl Command {
                 parse.finish()?;
                 Command::Publish { channel, message }
             }
+            "DBSIZE" => {
+                parse.finish()?;
+                Command::DbSize
+            }
             _ => Command::Unknown(cmd_name),
         };
 
@@ -287,6 +292,7 @@ impl Command {
                 Frame::bulk(channel),
                 Frame::Bulk(message.clone()),
             ]),
+            Command::DbSize => Frame::Array(vec![Frame::bulk("DBSIZE")]),
             Command::Unknown(name) => Frame::Array(vec![Frame::bulk(name)]),
         }
     }

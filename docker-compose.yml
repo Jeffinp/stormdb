@@ -1,0 +1,26 @@
+services:
+  # Servidor Principal (Master)
+  master:
+    build: .
+    container_name: stormdb-master
+    command: stormdb-server --host 0.0.0.0 --port 6379
+    ports:
+      - "6379:6379"
+    networks:
+      - stormnet
+
+  # Servidor de Replicação (Slave)
+  replica:
+    build: .
+    container_name: stormdb-replica
+    command: stormdb-server --host 0.0.0.0 --port 6380 --replicaof master 6379
+    ports:
+      - "6380:6380"
+    depends_on:
+      - master
+    networks:
+      - stormnet
+
+networks:
+  stormnet:
+    driver: bridge

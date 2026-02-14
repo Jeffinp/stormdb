@@ -1,6 +1,6 @@
 use tokio::sync::{broadcast, mpsc};
-use tokio_stream::{StreamExt, StreamMap};
 use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{StreamExt, StreamMap};
 use tracing::debug;
 
 use stormdb_common::{ConnectionError, StorageError};
@@ -9,12 +9,15 @@ use stormdb_storage::{Db, is_write_command};
 
 use crate::Connection;
 
+use crate::replication::handle_replica_stream;
+
 /// Loop principal de tratamento de uma conexão.
 pub async fn handle_connection(
     mut conn: Connection,
     db: Db,
     shutdown: &mut broadcast::Receiver<()>,
     aof_tx: Option<mpsc::Sender<Command>>,
+    replication_tx: broadcast::Sender<Command>,
 ) -> Result<(), ConnectionError> {
     loop {
         let frame = tokio::select! {
@@ -40,6 +43,15 @@ pub async fn handle_connection(
 
         debug!("comando recebido: {cmd:?}");
 
+        // Verificar Handshake de Réplica
+        if let Command::Ping(Some(ref msg)) = cmd
+            && msg.as_ref() == b"REPLICA_HANDSHAKE" {
+                // Upgrade para conexão de réplica
+                let rx = replication_tx.subscribe();
+                handle_replica_stream(conn, rx).await?;
+                return Ok(());
+            }
+
         match cmd {
             Command::Subscribe(channels) => {
                 handle_subscribe(&mut conn, &db, channels, shutdown).await?;
@@ -48,12 +60,15 @@ pub async fn handle_connection(
             _ => {
                 let response = execute_command(&cmd, &db).await;
 
-                // Persistir no AOF se é comando de escrita e foi bem-sucedido
-                if let Some(ref tx) = aof_tx
-                    && is_write_command(&cmd)
-                    && !matches!(response, Frame::Error(_))
-                {
-                    let _ = tx.send(cmd.clone()).await;
+                // Se é comando de escrita e foi bem-sucedido:
+                // 1. Persistir no AOF
+                // 2. Enviar para Replicação
+                if is_write_command(&cmd) && !matches!(response, Frame::Error(_)) {
+                    if let Some(ref tx) = aof_tx {
+                        let _ = tx.send(cmd.clone()).await;
+                    }
+                    // Broadcast para réplicas (não bloqueante se buffer cheio)
+                    let _ = replication_tx.send(cmd.clone());
                 }
 
                 conn.write_frame(&response).await?;
@@ -153,6 +168,10 @@ async fn execute_command(cmd: &Command, db: &Db) -> Frame {
         Command::Publish { channel, message } => {
             let count = db.publish(channel, message.clone()).await;
             Frame::Integer(count as i64)
+        }
+        Command::DbSize => {
+            let len = db.len();
+            Frame::Integer(len as i64)
         }
         Command::Subscribe(_) => unreachable!("handled above"),
         Command::Unsubscribe(_) => Frame::Simple("OK".into()),

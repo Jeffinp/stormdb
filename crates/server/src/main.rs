@@ -73,21 +73,23 @@ async fn main() -> anyhow::Result<()> {
 
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(args.max_connections));
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
+    // Canal de replicação: Master -> Réplicas (capacidade 10000 cmds em buffer)
+    let (replication_tx, _) = broadcast::channel::<stormdb_protocol::Command>(10000);
 
     // Iniciar Replicação se configurado
-    if let Some(replica_args) = args.replicaof {
-        if replica_args.len() == 2 {
+    if let Some(replica_args) = args.replicaof
+        && replica_args.len() == 2 {
             let master_host = replica_args[0].clone();
             let master_port = replica_args[1].parse::<u16>().unwrap_or(6379);
-            
+
             let db_replica = db.clone();
             let shutdown_replica = shutdown_tx.subscribe();
-            
+
             tokio::spawn(async move {
-                replication::replica_task(master_host, master_port, db_replica, shutdown_replica).await;
+                replication::replica_task(master_host, master_port, db_replica, shutdown_replica)
+                    .await;
             });
         }
-    }
 
     loop {
         let permit = tokio::select! {
@@ -119,11 +121,14 @@ async fn main() -> anyhow::Result<()> {
         info!("nova conexão: {addr}");
         let db = db.clone();
         let aof_tx = aof_tx.clone();
+        let replication_tx = replication_tx.clone();
         let mut shutdown_rx = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
             let conn = Connection::new(socket);
-            if let Err(e) = handle_connection(conn, db, &mut shutdown_rx, aof_tx).await {
+            if let Err(e) =
+                handle_connection(conn, db, &mut shutdown_rx, aof_tx, replication_tx).await
+            {
                 error!("erro na conexão {addr}: {e}");
             }
             info!("conexão encerrada: {addr}");

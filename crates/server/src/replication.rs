@@ -8,7 +8,6 @@ use stormdb_protocol::{Command, Frame};
 use stormdb_storage::Db;
 
 use crate::Connection;
-use crate::handler::handle_connection; // Reusamos a lógica de processamento
 
 /// Tarefa de fundo que mantém a conexão com o Master.
 pub async fn replica_task(
@@ -25,7 +24,10 @@ pub async fn replica_task(
         let stream = match TcpStream::connect(&addr).await {
             Ok(s) => s,
             Err(e) => {
-                warn!("Falha ao conectar no Master {}: {}. Tentando em 1s...", addr, e);
+                warn!(
+                    "Falha ao conectar no Master {}: {}. Tentando em 1s...",
+                    addr, e
+                );
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
                     _ = shutdown.recv() => return,
@@ -38,16 +40,19 @@ pub async fn replica_task(
 
         // Handshake simples (PSYNC ou similar - por enquanto enviamos um PING para testar)
         // Num futuro, enviaríamos "PSYNC ? -1" para pedir sincronização total.
-        if let Err(e) = conn.write_frame(&Frame::array_from_strs(&["PING", "REPLICA_HANDSHAKE"])).await {
-             error!("Erro no handshake com Master: {}", e);
-             continue;
+        if let Err(e) = conn
+            .write_frame(&Frame::array_from_strs(&["PING", "REPLICA_HANDSHAKE"]))
+            .await
+        {
+            error!("Erro no handshake com Master: {}", e);
+            continue;
         }
 
         // Loop de processamento de comandos vindos do Master
         // Reutilizamos o handle_connection mas sem responder nada (réplica é passiva na rede)
         // PORÉM, o handle_connection atual tenta escrever na socket.
         // Precisamos de uma versão que APENAS aplique a escrita no DB local.
-        
+
         loop {
             tokio::select! {
                 result = conn.read_frame() => {
@@ -78,7 +83,7 @@ pub async fn replica_task(
                 }
             }
         }
-        
+
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
@@ -87,12 +92,16 @@ async fn apply_replica_command(cmd: &Command, db: &Db) {
     // Aqui executamos o comando direto no DB.
     // Como é réplica, ignoramos comandos de leitura (GET) vindos do master (não devem vir, mas ok)
     // E executamos os de escrita.
-    
+
     // NOTA: Precisamos expor o `execute_command` do handler ou duplicar a lógica mínima.
     // Para simplificar, vou fazer um match manual nos comandos de escrita suportados.
-    
+
     match cmd {
-        Command::Set { key, value, options } => {
+        Command::Set {
+            key,
+            value,
+            options,
+        } => {
             let _ = db.set(key.clone(), value.clone(), options);
         }
         Command::Del(keys) => {
@@ -117,9 +126,35 @@ async fn apply_replica_command(cmd: &Command, db: &Db) {
             let _ = db.rpop(key, *count);
         }
         Command::Publish { channel, message } => {
-             db.publish(channel, message.clone()).await;
+            db.publish(channel, message.clone()).await;
         }
         // Ping e outros comandos de controle podem ser ignorados na replicação passiva por enquanto
         _ => {}
+    }
+}
+
+/// Handler para o lado do MASTER: envia comandos para a réplica conectada.
+pub async fn handle_replica_stream(
+    mut conn: Connection,
+    mut replication_rx: broadcast::Receiver<Command>,
+) -> Result<(), ConnectionError> {
+    info!("Iniciando stream de replicação para cliente.");
+    // conn.write_frame(&Frame::Simple("OK".into())).await?; // Removido: causava erro no parser da réplica
+
+    loop {
+        match replication_rx.recv().await {
+            Ok(cmd) => {
+                // Converter comando para Frame e enviar
+                let frame = cmd.to_frame();
+                conn.write_frame(&frame).await?;
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                warn!("Réplica atrasada: perdeu {} comandos.", n);
+                // Em um sistema real, aqui fecharíamos a conexão para forçar full-resync
+            }
+            Err(broadcast::error::RecvError::Closed) => {
+                return Ok(());
+            }
+        }
     }
 }

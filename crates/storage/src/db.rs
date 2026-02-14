@@ -316,6 +316,16 @@ impl Db {
         let mut pubsub = self.shared.pubsub.lock().await;
         pubsub.cleanup_channel(channel);
     }
+
+    // --- Stats ---
+
+    pub fn len(&self) -> usize {
+        self.shared.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.shared.data.is_empty()
+    }
 }
 
 impl Default for Db {

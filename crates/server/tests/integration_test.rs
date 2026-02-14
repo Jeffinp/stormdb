@@ -35,6 +35,7 @@ async fn start_server(port: u16) -> tokio::task::JoinHandle<()> {
             .unwrap();
         let db = stormdb_storage::Db::new();
         let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let (replication_tx, _) = tokio::sync::broadcast::channel::<stormdb_protocol::Command>(100);
 
         loop {
             let (socket, _) = tokio::select! {
@@ -44,9 +45,10 @@ async fn start_server(port: u16) -> tokio::task::JoinHandle<()> {
 
             let db = db.clone();
             let mut shutdown_rx = shutdown_tx.subscribe();
+            let replication_tx = replication_tx.clone();
             tokio::spawn(async move {
                 let conn = stormdb_server::Connection::new(socket);
-                let _ = stormdb_server::handle_connection(conn, db, &mut shutdown_rx, None).await;
+                let _ = stormdb_server::handle_connection(conn, db, &mut shutdown_rx, None, replication_tx).await;
             });
         }
     });
@@ -54,6 +56,31 @@ async fn start_server(port: u16) -> tokio::task::JoinHandle<()> {
     // Aguardar servidor estar pronto
     tokio::time::sleep(Duration::from_millis(50)).await;
     handle
+}
+
+#[tokio::test]
+async fn test_dbsize() {
+    let port = 16412;
+    let _server = start_server(port).await;
+
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}"))
+        .await
+        .unwrap();
+
+    let response = send_command(&mut stream, &["DBSIZE"]).await;
+    assert_eq!(response, Frame::Integer(0));
+
+    send_command(&mut stream, &["SET", "a", "1"]).await;
+    let response = send_command(&mut stream, &["DBSIZE"]).await;
+    assert_eq!(response, Frame::Integer(1));
+
+    send_command(&mut stream, &["SET", "b", "2"]).await;
+    let response = send_command(&mut stream, &["DBSIZE"]).await;
+    assert_eq!(response, Frame::Integer(2));
+
+    send_command(&mut stream, &["DEL", "a"]).await;
+    let response = send_command(&mut stream, &["DBSIZE"]).await;
+    assert_eq!(response, Frame::Integer(1));
 }
 
 #[tokio::test]
