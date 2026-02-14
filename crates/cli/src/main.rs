@@ -15,6 +15,10 @@ struct Args {
     host: String,
     #[arg(long, short, default_value_t = DEFAULT_PORT)]
     port: u16,
+
+    /// Comando para executar diretamente (modo não interativo)
+    #[arg(trailing_var_arg = true)]
+    command: Vec<String>,
 }
 
 #[tokio::main]
@@ -23,6 +27,14 @@ async fn main() -> anyhow::Result<()> {
     let addr = format!("{}:{}", args.host, args.port);
 
     let mut stream = TcpStream::connect(&addr).await?;
+    
+    // Modo comando único (via argumentos)
+    if !args.command.is_empty() {
+        let frame = Frame::array_from_strs(&args.command.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+        execute_request(&mut stream, frame).await?;
+        return Ok(());
+    }
+
     println!("Conectado a {addr}");
 
     let stdin = io::stdin();
@@ -52,32 +64,39 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let frame = Frame::array_from_strs(&tokens.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-        let mut buf = BytesMut::new();
-        frame.encode(&mut buf);
-
-        stream.write_all(&buf).await?;
-        stream.flush().await?;
-
-        // Ler resposta
-        let mut response_buf = BytesMut::with_capacity(4096);
-        loop {
-            let n = stream.read_buf(&mut response_buf).await?;
-            if n == 0 {
-                println!("(disconnected)");
-                return Ok(());
-            }
-
-            let mut cursor = std::io::Cursor::new(&response_buf[..]);
-            if Frame::check(&mut cursor).is_ok() {
-                cursor.set_position(0);
-                let response =
-                    Frame::parse(&mut cursor).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
-                println!("{}", format_frame(&response, 0));
-                break;
-            }
+        if let Err(e) = execute_request(&mut stream, frame).await {
+             println!("(error) {}", e);
+             // Tentar reconectar ou sair? Por enquanto apenas loga
         }
     }
 
+    Ok(())
+}
+
+async fn execute_request(stream: &mut TcpStream, frame: Frame) -> anyhow::Result<()> {
+    let mut buf = BytesMut::new();
+    frame.encode(&mut buf);
+
+    stream.write_all(&buf).await?;
+    stream.flush().await?;
+
+    // Ler resposta
+    let mut response_buf = BytesMut::with_capacity(4096);
+    loop {
+        let n = stream.read_buf(&mut response_buf).await?;
+        if n == 0 {
+            return Err(anyhow::anyhow!("servidor fechou a conexão"));
+        }
+
+        let mut cursor = std::io::Cursor::new(&response_buf[..]);
+        if Frame::check(&mut cursor).is_ok() {
+            cursor.set_position(0);
+            let response =
+                Frame::parse(&mut cursor).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+            println!("{}", format_frame(&response, 0));
+            break;
+        }
+    }
     Ok(())
 }
 

@@ -1,10 +1,14 @@
-# StormDB
+# StormDB ⚡
 
-StormDB é um banco de dados in-memory de alta performance, compatível com o protocolo Redis (RESP2), implementado em Rust.
+**StormDB** é um banco de dados in-memory de alta performance, compatível com o protocolo Redis (RESP2), escrito puramente em **Rust**.
 
-O projeto demonstra a aplicação de conceitos de sistemas distribuídos, concorrência segura (thread-safety) e arquitetura de software modular.
+Este projeto demonstra a aplicação de conceitos avançados de sistemas distribuídos, concorrência segura (thread-safety) e arquitetura de software modular.
 
-## Funcionalidades
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Rust](https://img.shields.io/badge/rust-1.93%2B-orange)
+![Status](https://img.shields.io/badge/status-stable-green)
+
+## 🚀 Funcionalidades
 
 - **Alta Concorrência:** Utiliza `DashMap` para sharding automático e acesso lock-free em operações de leitura.
 - **Async I/O:** Baseado no runtime `Tokio` para gerenciar milhares de conexões simultâneas de forma eficiente.
@@ -14,7 +18,7 @@ O projeto demonstra a aplicação de conceitos de sistemas distribuídos, concor
 - **Monitoramento:** Ferramenta TUI (Terminal User Interface) integrada para visualização de métricas em tempo real.
 - **Infraestrutura:** Configuração completa via Docker e Docker Compose.
 
-## Arquitetura
+## 🛠️ Arquitetura
 
 O projeto segue a estrutura de Cargo Workspace para modularização:
 
@@ -25,67 +29,100 @@ O projeto segue a estrutura de Cargo Workspace para modularização:
 - `crates/cli`: Cliente de linha de comando para interação direta.
 - `crates/monitor`: Dashboard de monitoramento via terminal.
 
-## Executando com Docker
+## 🐳 Quick Start (Docker)
 
-Para iniciar o cluster completo (Master e Réplica) utilizando Docker Compose:
+A maneira mais fácil de rodar o cluster completo (Master + Réplica).
 
 ```bash
+# Sobe o Master (6379) e a Réplica (6380)
 docker compose up --build
 ```
 
-### Monitoramento
+### Monitoramento Visual
 
-Com o cluster em execução, o monitor TUI pode ser iniciado em um container separado:
+Com o cluster rodando, abra outro terminal para visualizar o dashboard:
 
 ```bash
+# Conecta o monitor TUI ao Master rodando no Docker
 docker run -it --rm --network stormdb_stormnet stormdb-master stormdb-monitor --host master --port 6379
 ```
 
-### Teste de Replicação
+### Testando a Replicação
 
-Para validar a sincronização de dados entre Master e Réplica:
+Abra um terceiro terminal para enviar comandos:
 
 ```bash
-# Escrita no Master
-docker exec -it stormdb-master stormdb-cli SET chave valor
+# Escreve no Master
+docker exec -it stormdb-master stormdb-cli --port 6379 SET framework "Rust"
 
-# Leitura na Réplica
-docker exec -it stormdb-replica stormdb-cli GET chave
+# Lê da Réplica (deve retornar "Rust")
+docker exec -it stormdb-replica stormdb-cli --port 6380 GET framework
 ```
 
-## Desenvolvimento Local
+## 💻 Desenvolvimento Local
 
-Requisitos: Rust 1.93 ou superior.
+Se você tem Rust instalado (`1.93+`):
 
-1. Iniciar o servidor (porta padrão 6379):
-   ```bash
-   cargo run -p stormdb-server -- --port 6379
-   ```
+### 1. Iniciar o Servidor
 
-2. Iniciar o monitor:
-   ```bash
-   cargo run -p stormdb-monitor -- --port 6379
-   ```
+Abra um terminal e inicie o servidor na porta padrão do Redis (6379):
 
-3. Executar comandos via CLI:
-   ```bash
-   cargo run -p stormdb-cli SET framework Rust
-   ```
+```bash
+cargo run -p stormdb-server -- --port 6379
+```
 
-## Comandos Suportados
+### 2. Iniciar o Monitor
 
-- **String:** `SET` (com opções EX, PX, NX, XX), `GET`, `INCR`, `DECR`, `ECHO`
-- **List:** `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`
-- **Generic:** `DEL`, `EXISTS`, `PING`, `DBSIZE`
-- **PubSub:** `SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE`
-- **Replication:** `REPLICAOF`
+Em outro terminal, inicie o dashboard para ver as métricas:
 
-## Benchmarks
+```bash
+cargo run -p stormdb-monitor -- --port 6379
+```
+
+### 3. Executar Comandos (CLI)
+
+Em um terceiro terminal, você pode interagir com o banco:
+
+```bash
+# Comando único
+cargo run -p stormdb-cli -- --port 6379 SET minha_chave "Funciona!"
+
+# Recuperar valor
+cargo run -p stormdb-cli -- --port 6379 GET minha_chave
+```
+
+### 4. Teste de Carga (Benchmark Visual)
+
+Para ver o gráfico do monitor subir, execute este loop de inserção:
+
+```bash
+# Dica: Compile em release primeiro para máxima velocidade
+cargo build --release --bin stormdb-cli
+
+# Inserir 1000 chaves rapidamente
+for i in {1..1000}; do ./target/release/stormdb-cli --port 6379 SET chave$i valor$i; done
+```
+
+## 📚 Comandos Suportados
+
+| Categoria   | Comandos                                                         |
+| ----------- | ---------------------------------------------------------------- |
+| **String**  | `SET` (com opções EX, PX, NX, XX), `GET`, `INCR`, `DECR`, `ECHO` |
+| **List**    | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`                       |
+| **Generic** | `DEL`, `EXISTS`, `PING`, `DBSIZE`                                |
+| **PubSub**  | `SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE`                            |
+| **System**  | `REPLICAOF`                                                      |
+
+## ⚡ Benchmarks
 
 Testes preliminares em ambiente local (Linux, Release build):
 
 | Operação | Latência Média | Throughput |
-|----------|----------------|------------|
+| -------- | -------------- | ---------- |
 | PING     | ~30 µs         | 120k ops/s |
 | SET      | ~45 µs         | 95k ops/s  |
 | GET      | ~35 µs         | 110k ops/s |
+
+---
+
+_Desenvolvido com 🦀 e paixão por sistemas distribuídos._
