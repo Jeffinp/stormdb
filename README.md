@@ -29,6 +29,20 @@ O projeto segue a estrutura de Cargo Workspace para modularização:
 - `crates/cli`: Cliente de linha de comando para interação direta.
 - `crates/monitor`: Dashboard de monitoramento via terminal.
 
+```mermaid
+graph TD
+    User[Client / CLI] -->|TCP (RESP)| Master[StormDB Master]
+    Monitor[TUI Dashboard] -.->|TCP (Stats)| Master
+    
+    subgraph "Cluster StormDB"
+    Master -->|Broadcast Stream| Replica[StormDB Replica]
+    Master -->|AOF| Disk[(Persistence)]
+    end
+    
+    style Master fill:#e67e22,stroke:#333,stroke-width:2px,color:#fff
+    style Replica fill:#3498db,stroke:#333,stroke-width:2px,color:#fff
+```
+
 ## 🐳 Quick Start (Docker)
 
 A maneira mais fácil de rodar o cluster completo (Master + Réplica).
